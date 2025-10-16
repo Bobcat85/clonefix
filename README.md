@@ -34,15 +34,15 @@ HTML:
             </form>
         </div>
     </nav>
-    <header class="hero bg-black">
+    <header id="hero" class="hero bg-black">
         <div class="container">
-            <h1 id="heroeTitle" class="display-5 fw-bold"></h1>
-            <p id="heroeDesc" class="lead col-lg-6"></p>
-            <button id="heroePlay" class="btn btn-danger btn-lg">Ver Ahora</button>
+            <h1 id="heroTitle" class="display-5 fw-bold"></h1>
+            <p id="heroDesc" class="lead col-lg-6"></p>
+            <button id="heroPlay" class="btn btn-danger btn-lg">Ver Ahora</button>
         </div>
     </header>
     <main id="rowsContainer" class="container my-4">
-
+      
     </main>
     <footer class="footer py-4 mt-5">
         <div class="container small"> 
@@ -65,6 +65,7 @@ HTML:
 </body>
 </html>
 ---
+
 CSS:
 body{
     background-color: #0B0D10;
@@ -139,7 +140,10 @@ body{
     border-radius: 4px;
 }
 ---
+
 app.js:
+
+
 //API a tvmaze
 const API = "https://api.tvmaze.com"
 
@@ -152,8 +156,25 @@ const heroPlay = document.getElementById('heroPlay')
 
 const init = async () => {
     const trending = await fetchJSON(`${API}/shows?page=1`)
+    renderHero(trending[Math.floor(Math.random()*trending.length)])
     renderRow("Tendencias", trending.slice(0,20))
-    console.log('@@@ trending', trending)
+    wireSerch()
+}
+
+const wireSerch = () => {
+    const form = document.getElementById('searchForm')
+    const input = document.getElementById('searchInput')
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const movie = input.value.trim()
+        if(!movie){
+            return 
+        }
+        const results = await fetchJSON(`${API}/search/shows?q=${encodeURIComponent(movie)}`)
+        const shows = results.map(r => r.show)
+        rowsContainer.innerHTML = ''
+        renderRow(`Resultados para ${movie}`, shows)
+    })
 }
 
 const renderRow = (title, shows) => {
@@ -164,9 +185,36 @@ const renderRow = (title, shows) => {
     <h3 class="rowTitle">${title}</h3>
     <div class="rail" data-rail></div>
     `
-    //funcion para crear los poster mini y pegarlos
-
+    const rail = section.querySelector('[data-rail]')
+    shows.forEach((show) => {
+        rail.appendChild(posterCard(show))
+    })
     rowsContainer.appendChild(section)
+}
+
+const posterCard = show => {
+    const card = document.createElement('div')
+    card.className = 'car card-poster'
+    const img = show?.image?.medium || 'https://placehold.co/600x400?text=Sin+Imagen '
+
+    card.innerHTML = 
+    `
+    <img class="card-img-top" src="${img}">
+    <div class="card-body p-2">
+        <div class="small text-secondary">
+        ${(show.genres || []).slice(0,2).join(".")}
+        </div>
+        <div class="fw-semibold">
+        ${escapeHTML(show.name)}
+        </div>
+    </div>
+    `
+    card.addEventListener('click', () => openDetail(show.id))
+    return card
+}
+
+const escapeHTML = s =>{
+    return (s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))
 }
 
 const fetchJSON = async (url) => {
@@ -177,8 +225,60 @@ const fetchJSON = async (url) => {
     return await res.json()
 }
 
----
+const renderHero = show =>{
+    if(!show){
+        return
+    }
+    const bg = show?.image?.original || show?.image?.medium || 'https://placehold.co/1920x1080?text=Sin+Imagen'
+    
+    hero.style.backgroundImage = bg? `url(${bg})`: 'none'
+    heroTitle.textContent = show.name || ''
+    heroDesc.innerHTML = stripHTML(show?.summary || '').slice(0.200) + '...'
+    heroPlay.onClick = () => openDetail(show.id)
+}
 
+const stripHTML = html =>{
+    return (html||"").replace(/<[^>]*>/g,"")
+
+}
+
+const openDetail = async (id) => {
+    const modalEl = document.getElementById('detailModal')
+    const modalBody = document.getElementById('detailBody')
+    const modalTitle = document.getElementById('detailTitle')
+    modalTitle.textContent = 'cargando...'
+    modalBody.innerHTML = 'cargando...'
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl)
+
+    const show = await fetchJSON(`${API}/shows/${id}`)
+    modalTitle.textContent = show.name
+    modalBody.innerHTML =
+    `
+    <div class="row g-4">
+        <div class="col-md-4">
+            <img class="img-fluid rounded" src="${show?.image?.original ||show?.image?.medium || 'https://placehold.co/600x400?text=Sin+Imagen'}"/>
+        </div>
+        <div class="col-md-8">
+            <div class="mb-2">
+                ${show.genres.map(g => `<span class="badge badge-genre me-1">${g}</span>`).join("")}
+            </div>
+            <p class="text-secondary small">
+            ${show.summary || "sin sinopsis"}
+            </p>
+            <p class="text-secondary small">
+            ⭐ ${show?.raiting?.average ?? 'N/A'} · Lenguaje: ${show?.language ?? 'N/A'} · Status: ${show?.status ?? 'N/A'}
+            </p>
+            <a class="btn btn-outline-light me-2" href="${show?.officialSite || show?.url}" target="_blank" rel="noopener">
+            web site
+            </a>
+        </div>
+        </div>
+    </div>
+    `
+    modal.show()
+}
+init()
 - [index.html](index.html)
 - [app.js](app.js)
 - [app.css](app.css)
